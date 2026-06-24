@@ -1,0 +1,1207 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>มวยไทยเสียง — Voice Muay Thai 3D</title>
+<style>
+  :root{
+    --ring-red:#b8242b;
+    --ring-gold:#d4a13d;
+    --ink:#13110f;
+    --paper:#f3ebd9;
+    --p1:#3aa6ff;
+    --p2:#ff4d4d;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  html,body{
+    width:100%; height:100%; overflow:hidden;
+    background:var(--ink);
+    font-family:'Sarabun', 'Noto Sans Thai', sans-serif;
+    -webkit-tap-highlight-color: transparent;
+    touch-action:none;
+  }
+  #canvas-wrap{position:fixed; inset:0;}
+  canvas{display:block; width:100%; height:100%;}
+
+  /* ---------- HUD ---------- */
+  #hud{
+    position:fixed; inset:0; pointer-events:none;
+    display:flex; flex-direction:column; justify-content:space-between;
+    padding:env(safe-area-inset-top,12px) 14px 14px;
+    z-index:10;
+  }
+  .hp-row{display:flex; align-items:center; gap:10px; width:100%;}
+  .hp-row.p2{flex-direction:row-reverse;}
+  .hp-name{
+    font-weight:700; font-size:13px; color:var(--paper);
+    text-shadow:0 1px 3px rgba(0,0,0,.8);
+    min-width:64px; text-align:left;
+  }
+  .hp-row.p2 .hp-name{text-align:right;}
+  .hp-bar-outer{
+    flex:1; height:18px; border-radius:9px;
+    background:rgba(0,0,0,.55);
+    border:2px solid rgba(212,161,61,.7);
+    overflow:hidden; position:relative;
+  }
+  .hp-bar-inner{
+    height:100%; width:100%;
+    transition:width .35s cubic-bezier(.2,.8,.2,1);
+    background:linear-gradient(180deg,#5fe06a,#2aa83a);
+  }
+  .hp-row.p2 .hp-bar-inner{margin-left:auto;}
+  .hp-bar-inner.warn{background:linear-gradient(180deg,#ffd24d,#e0a300);}
+  .hp-bar-inner.danger{background:linear-gradient(180deg,#ff6b5e,#c4271a);}
+  .stamina-outer{
+    flex:1; height:7px; border-radius:4px; margin-top:3px;
+    background:rgba(0,0,0,.5); overflow:hidden;
+  }
+  .stamina-inner{
+    height:100%; width:100%; background:#3aa6ff;
+    transition:width .25s ease;
+  }
+  .top-stack{display:flex; flex-direction:column; gap:6px;}
+
+  #round-pill{
+    align-self:center; margin-top:6px;
+    background:rgba(0,0,0,.55); border:1px solid rgba(212,161,61,.6);
+    color:var(--ring-gold); font-weight:700; font-size:13px;
+    padding:4px 16px; border-radius:14px; letter-spacing:.5px;
+  }
+
+  #mic-status{
+    position:fixed; left:14px; bottom:env(safe-area-inset-bottom,14px);
+    display:flex; align-items:center; gap:8px;
+    background:rgba(0,0,0,.55); border-radius:20px;
+    padding:8px 14px 8px 10px; z-index:11; pointer-events:auto;
+    border:1px solid rgba(212,161,61,.4);
+  }
+  #mic-dot{
+    width:11px; height:11px; border-radius:50%;
+    background:#666; transition:background .2s, box-shadow .2s;
+  }
+  #mic-dot.live{background:#ff3b3b; box-shadow:0 0 10px 3px rgba(255,59,59,.7);}
+  #mic-dot.off{background:#444;}
+  #mic-text{color:var(--paper); font-size:12px; font-weight:600;}
+  #heard-text{
+    color:var(--ring-gold); font-size:12px; font-weight:700;
+    min-width:50px;
+  }
+
+  #cmd-toast{
+    position:fixed; bottom:64px; left:50%; transform:translateX(-50%) translateY(10px);
+    background:rgba(184,36,43,.92); color:#fff; font-weight:800; font-size:20px;
+    padding:8px 22px; border-radius:10px; letter-spacing:1px;
+    opacity:0; transition:opacity .15s, transform .15s; z-index:12;
+    pointer-events:none; text-shadow:0 1px 2px rgba(0,0,0,.4);
+  }
+  #cmd-toast.show{opacity:1; transform:translateX(-50%) translateY(0);}
+
+  /* ---------- Overlays ---------- */
+  .overlay{
+    position:fixed; inset:0; z-index:30;
+    background:radial-gradient(ellipse at center, rgba(20,16,12,.92), rgba(8,6,5,.97));
+    display:flex; align-items:center; justify-content:center;
+    flex-direction:column; gap:18px; padding:24px; text-align:center;
+  }
+  .hidden{display:none !important;}
+  .title-big{
+    font-size:30px; font-weight:800; color:var(--ring-gold);
+    letter-spacing:1px; text-shadow:0 2px 6px rgba(0,0,0,.6);
+  }
+  .subtitle{color:var(--paper); font-size:14px; opacity:.85; max-width:320px; line-height:1.6;}
+  .btn{
+    font-family:inherit; font-weight:700; font-size:16px;
+    padding:14px 30px; border-radius:10px; border:none;
+    background:linear-gradient(180deg,#e0b04f,var(--ring-gold));
+    color:#1a1408; cursor:pointer; min-width:220px;
+    box-shadow:0 4px 0 #8a6a1f, 0 6px 14px rgba(0,0,0,.4);
+    transition:transform .08s;
+  }
+  .btn:active{transform:translateY(3px); box-shadow:0 1px 0 #8a6a1f;}
+  .btn.secondary{
+    background:rgba(255,255,255,.08); color:var(--paper);
+    box-shadow:0 4px 0 rgba(0,0,0,.4);
+    border:1px solid rgba(212,161,61,.4);
+  }
+  .room-code-display{
+    font-size:42px; font-weight:800; letter-spacing:8px; color:#fff;
+    background:rgba(212,161,61,.15); border:2px dashed var(--ring-gold);
+    padding:14px 26px; border-radius:14px;
+  }
+  #room-input{
+    font-size:28px; letter-spacing:10px; text-align:center;
+    width:220px; padding:12px; border-radius:10px; border:2px solid var(--ring-gold);
+    background:rgba(255,255,255,.06); color:#fff; font-weight:700;
+    font-family:inherit;
+  }
+  #room-input::placeholder{color:rgba(255,255,255,.3); letter-spacing:6px;}
+  .status-line{color:var(--paper); font-size:13px; opacity:.8; min-height:18px;}
+  .cmd-grid{
+    display:grid; grid-template-columns:1fr 1fr; gap:6px 18px;
+    color:var(--paper); font-size:13px; opacity:.85; max-width:320px;
+    text-align:left; margin-top:4px;
+  }
+  .cmd-grid b{color:var(--ring-gold);}
+  .spinner{
+    width:34px; height:34px; border-radius:50%;
+    border:4px solid rgba(212,161,61,.25); border-top-color:var(--ring-gold);
+    animation:spin 1s linear infinite;
+  }
+  @keyframes spin{to{transform:rotate(360deg);}}
+
+  #winner-banner{font-size:34px; font-weight:800; margin-bottom:4px;}
+  #winner-banner.win{color:#5fe06a;}
+  #winner-banner.lose{color:#ff6b5e;}
+
+  @media (max-width:380px){
+    .title-big{font-size:24px;}
+    .room-code-display{font-size:32px; letter-spacing:5px;}
+  }
+</style>
+</head>
+<body>
+
+<div id="canvas-wrap"></div>
+
+<!-- ===================== HUD ===================== -->
+<div id="hud">
+  <div class="top-stack">
+    <div class="hp-row p1">
+      <div class="hp-name" id="p1-name">คุณ</div>
+      <div style="flex:1;">
+        <div class="hp-bar-outer"><div class="hp-bar-inner" id="p1-hp"></div></div>
+        <div class="stamina-outer"><div class="stamina-inner" id="p1-stamina"></div></div>
+      </div>
+    </div>
+    <div class="hp-row p2">
+      <div class="hp-name" id="p2-name">คู่ต่อสู้</div>
+      <div style="flex:1;">
+        <div class="hp-bar-outer"><div class="hp-bar-inner" id="p2-hp"></div></div>
+        <div class="stamina-outer"><div class="stamina-inner" id="p2-stamina"></div></div>
+      </div>
+    </div>
+    <div id="round-pill">ยกที่ 1 — 1:30</div>
+  </div>
+  <div></div>
+</div>
+
+<div id="mic-status">
+  <div id="mic-dot" class="off"></div>
+  <div id="mic-text">ไมค์ปิด</div>
+  <div id="heard-text"></div>
+</div>
+
+<div id="cmd-toast"></div>
+
+<!-- ===================== Overlay: Main Menu ===================== -->
+<div class="overlay" id="menu-overlay">
+  <div class="title-big">มวยไทยเสียง 🥊</div>
+  <div class="subtitle">ชกมวยด้วยคำสั่งเสียงภาษาไทย เล่นออนไลน์กับเพื่อน 2 คนคนละเครื่อง</div>
+  <button class="btn" id="btn-create-room">สร้างห้องใหม่</button>
+  <button class="btn secondary" id="btn-show-join">เข้าห้องด้วยรหัส</button>
+  <button class="btn secondary" id="btn-vs-bot">ฝึกกับบอท AI</button>
+  <div class="cmd-grid">
+    <div><b>ซ้าย</b> — หมัดซ้าย</div>
+    <div><b>ขวา</b> — หมัดขวา</div>
+    <div><b>เข่า</b> — ตีเข่า</div>
+    <div><b>ศอก</b> — ตีศอก</div>
+    <div><b>เตะ</b> — เตะ</div>
+    <div><b>บล็อก</b> — ป้องกัน</div>
+    <div><b>หลบ</b> — หลบหลีก</div>
+    <div><b>การ์ด</b> — ยกการ์ดสูง</div>
+    <div><b>เดินหน้า</b> — ก้าวเข้า</div>
+    <div><b>ถอยหลัง</b> — ก้าวออก</div>
+    <div><b>ไปซ้าย</b> — เดินซ้าย</div>
+    <div><b>ไปขวา</b> — เดินขวา</div>
+  </div>
+</div>
+
+<!-- ===================== Overlay: Bot Difficulty ===================== -->
+<div class="overlay hidden" id="bot-difficulty-overlay">
+  <div class="title-big">เลือกระดับบอท</div>
+  <div class="subtitle">บอทจะโจมตีและป้องกันด้วยกลยุทธ์ของตัวเอง ไม่ใช่สุ่มมั่วๆ</div>
+  <button class="btn" id="btn-bot-easy">ง่าย — มือใหม่</button>
+  <button class="btn" id="btn-bot-medium">กลาง — มีฝีมือ</button>
+  <button class="btn" id="btn-bot-hard">ยาก — นักชกตัวจริง</button>
+  <button class="btn secondary" id="btn-back-from-bot">ย้อนกลับ</button>
+</div>
+
+<!-- ===================== Overlay: Join Room ===================== -->
+<div class="overlay hidden" id="join-overlay">
+  <div class="title-big">เข้าห้อง</div>
+  <div class="subtitle">กรอกรหัสห้อง 4 หลักที่เพื่อนส่งให้</div>
+  <input type="tel" id="room-input" placeholder="0000" maxlength="4" inputmode="numeric">
+  <button class="btn" id="btn-confirm-join">เข้าห้อง</button>
+  <button class="btn secondary" id="btn-back-from-join">ย้อนกลับ</button>
+  <div class="status-line" id="join-status"></div>
+</div>
+
+
+<!-- ===================== Overlay: Waiting Room (host) ===================== -->
+<div class="overlay hidden" id="waiting-overlay">
+  <div class="title-big">รอคู่ต่อสู้...</div>
+  <div class="subtitle">บอกรหัสนี้ให้เพื่อนกรอกในเครื่องของเขา</div>
+  <div class="room-code-display" id="room-code-text">0000</div>
+  <div class="spinner"></div>
+  <button class="btn secondary" id="btn-cancel-wait">ยกเลิก</button>
+</div>
+
+<!-- ===================== Overlay: Mic Permission ===================== -->
+<div class="overlay hidden" id="mic-overlay">
+  <div class="title-big">เปิดไมโครโฟน</div>
+  <div class="subtitle">เกมนี้ควบคุมด้วยเสียงภาษาไทยล้วน กดอนุญาตให้เข้าถึงไมค์เพื่อเริ่มชก<br><br>
+  <b style="color:var(--ring-gold)">ต้องใช้ Chrome หรือ Edge</b> (Safari/Firefox ยังไม่รองรับการรู้จำเสียงแบบนี้)</div>
+  <button class="btn" id="btn-enable-mic">อนุญาตไมโครโฟน &amp; เริ่มชก</button>
+  <div class="status-line" id="mic-perm-status"></div>
+</div>
+
+<!-- ===================== Overlay: Round End ===================== -->
+<div class="overlay hidden" id="result-overlay">
+  <div id="winner-banner">ชนะ!</div>
+  <div class="subtitle" id="result-sub">คู่ต่อสู้หมดสติ</div>
+  <button class="btn" id="btn-rematch">ขอแข่งใหม่</button>
+  <button class="btn secondary" id="btn-exit">ออกไปเมนูหลัก</button>
+  <div class="status-line" id="result-status"></div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/0.160.0/three.min.js"></script>
+<script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+<script>
+/* =========================================================================
+   มวยไทยเสียง — Voice Muay Thai 3D
+   ตั้งค่าก่อนใช้งานจริง: เปลี่ยน SERVER_URL ให้ตรงกับ URL ของ server ที่ deploy ไว้
+   ========================================================================= */
+const SERVER_URL = "https://boxcing.onrender.com";
+
+/* ====================== 1) THREE.JS SCENE SETUP ====================== */
+const wrap = document.getElementById('canvas-wrap');
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0a0908);
+scene.fog = new THREE.Fog(0x0a0908, 14, 34);
+
+const camera = new THREE.PerspectiveCamera(50, window.innerWidth/window.innerHeight, 0.1, 100);
+camera.position.set(0, 2.4, 6.2);
+camera.lookAt(0, 1.1, 0);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+wrap.appendChild(renderer.domElement);
+
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth/window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+// ---- Lighting: สปอตไลท์เวทีมวย ----
+const ambient = new THREE.AmbientLight(0x403830, 0.9);
+scene.add(ambient);
+
+const rim = new THREE.HemisphereLight(0x4a4030, 0x0a0808, 0.5);
+scene.add(rim);
+
+function makeSpot(x,z,color,intensity){
+  const spot = new THREE.SpotLight(color, intensity, 22, Math.PI/5, 0.4, 1.2);
+  spot.position.set(x, 7.5, z);
+  spot.target.position.set(0, 0, 0);
+  spot.castShadow = true;
+  spot.shadow.mapSize.set(1024,1024);
+  scene.add(spot, spot.target);
+  return spot;
+}
+makeSpot(-4, -3, 0xfff2d8, 60);
+makeSpot(4, -3, 0xfff2d8, 60);
+makeSpot(0, 4, 0xffe8c0, 40);
+
+/* ====================== 2) RING (เวทีมวย) ====================== */
+const ringGroup = new THREE.Group();
+scene.add(ringGroup);
+
+const canvasMat = (function(){
+  const c = document.createElement('canvas'); c.width=512; c.height=512;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#b8242b'; ctx.fillRect(0,0,512,512);
+  ctx.strokeStyle='rgba(255,255,255,.5)'; ctx.lineWidth=3;
+  for(let i=0;i<=512;i+=64){ ctx.beginPath(); ctx.moveTo(i,0); ctx.lineTo(i,512); ctx.stroke(); }
+  ctx.fillStyle='rgba(212,161,61,.9)';
+  ctx.font='bold 54px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillText('MUAY THAI', 256, 256);
+  const tex = new THREE.CanvasTexture(c);
+  return new THREE.MeshStandardMaterial({ map: tex, roughness:0.95 });
+})();
+const floor = new THREE.Mesh(new THREE.BoxGeometry(7.2, 0.3, 7.2), canvasMat);
+floor.position.y = -0.15;
+floor.receiveShadow = true;
+ringGroup.add(floor);
+
+const outerFloor = new THREE.Mesh(
+  new THREE.CircleGeometry(20, 32),
+  new THREE.MeshStandardMaterial({ color:0x14110d, roughness:1 })
+);
+outerFloor.rotation.x = -Math.PI/2;
+outerFloor.position.y = -0.301;
+outerFloor.receiveShadow = true;
+scene.add(outerFloor);
+
+const postMat = new THREE.MeshStandardMaterial({ color:0xd4a13d, metalness:0.3, roughness:0.5 });
+const ropeMat = new THREE.MeshStandardMaterial({ color:0xe8d8a8, roughness:0.6 });
+const postPositions = [[-3.5,-3.5],[3.5,-3.5],[-3.5,3.5],[3.5,3.5]];
+postPositions.forEach(([x,z])=>{
+  const post = new THREE.Mesh(new THREE.CylinderGeometry(0.09,0.09,2.4,12), postMat);
+  post.position.set(x, 1.05, z);
+  post.castShadow = true;
+  ringGroup.add(post);
+});
+[0.5, 0.95, 1.4].forEach(h=>{
+  const pts = [
+    [-3.5,h,-3.5],[3.5,h,-3.5],[3.5,h,-3.5],[3.5,h,3.5],
+    [3.5,h,3.5],[-3.5,h,3.5],[-3.5,h,3.5],[-3.5,h,-3.5]
+  ];
+  for(let i=0;i<pts.length;i+=2){
+    const a = new THREE.Vector3(...pts[i]), b = new THREE.Vector3(...pts[i+1]);
+    const len = a.distanceTo(b);
+    const rope = new THREE.Mesh(new THREE.CylinderGeometry(0.035,0.035,len,8), ropeMat);
+    rope.position.copy(a).lerp(b,0.5);
+    rope.lookAt(b);
+    rope.rotateX(Math.PI/2);
+    ringGroup.add(rope);
+  }
+});
+
+/* ====================== 3) HUMANOID FIGHTER RIG ====================== */
+function buildFighter(skinColor, shortsColor, gloveColor){
+  const skinMat = new THREE.MeshStandardMaterial({ color: skinColor, roughness:0.7 });
+  const shortsMat = new THREE.MeshStandardMaterial({ color: shortsColor, roughness:0.8 });
+  const gloveMat = new THREE.MeshStandardMaterial({ color: gloveColor, roughness:0.5 });
+
+  function box(w,h,d,mat){ const m = new THREE.Mesh(new THREE.BoxGeometry(w,h,d,2,2,2), mat); m.castShadow=true; return m; }
+  function capsule(r,len,mat){ const m = new THREE.Mesh(new THREE.CapsuleGeometry(r,len,4,8), mat); m.castShadow=true; return m; }
+  function sphere(r,mat){ const m = new THREE.Mesh(new THREE.SphereGeometry(r,12,10), mat); m.castShadow=true; return m; }
+
+  const root = new THREE.Group();
+
+  const hip = new THREE.Group(); hip.position.y = 0.92; root.add(hip);
+  const hipMesh = box(0.34,0.22,0.22, shortsMat); hip.add(hipMesh);
+
+  const spine = new THREE.Group(); spine.position.y = 0.13; hip.add(spine);
+  const chest = box(0.4,0.42,0.24, skinMat); chest.position.y=0.21; spine.add(chest);
+
+  const neck = new THREE.Group(); neck.position.y = 0.44; spine.add(neck);
+  const head = sphere(0.16, skinMat); head.position.y = 0.14; neck.add(head);
+  const nose = box(0.05,0.05,0.08, skinMat); nose.position.set(0,0.13,0.14); neck.add(nose);
+
+  function buildArm(side){
+    const shoulder = new THREE.Group();
+    shoulder.position.set(side*0.26, 0.36, 0);
+    spine.add(shoulder);
+    const upperArm = capsule(0.07, 0.28, skinMat);
+    upperArm.position.y = -0.17;
+    shoulder.add(upperArm);
+
+    const elbow = new THREE.Group();
+    elbow.position.y = -0.32;
+    shoulder.add(elbow);
+    const lowerArm = capsule(0.06, 0.26, skinMat);
+    lowerArm.position.y = -0.15;
+    elbow.add(lowerArm);
+
+    const glove = sphere(0.115, gloveMat);
+    glove.position.y = -0.30;
+    elbow.add(glove);
+
+    return { shoulder, elbow, glove };
+  }
+  const armL = buildArm(1);
+  const armR = buildArm(-1);
+
+  function buildLeg(side){
+    const thighPivot = new THREE.Group();
+    thighPivot.position.set(side*0.13, -0.1, 0);
+    hip.add(thighPivot);
+    const thigh = capsule(0.095, 0.34, shortsMat);
+    thigh.position.y = -0.2;
+    thighPivot.add(thigh);
+
+    const kneePivot = new THREE.Group();
+    kneePivot.position.y = -0.4;
+    thighPivot.add(kneePivot);
+    const shin = capsule(0.075, 0.34, skinMat);
+    shin.position.y = -0.19;
+    kneePivot.add(shin);
+
+    const foot = box(0.13,0.08,0.22, shortsMat);
+    foot.position.y = -0.38;
+    foot.position.z = 0.04;
+    kneePivot.add(foot);
+
+    return { thighPivot, kneePivot };
+  }
+  const legL = buildLeg(1);
+  const legR = buildLeg(-1);
+
+  return { root, hip, spine, neck, head, armL, armR, legL, legR };
+}
+
+const fighter1 = buildFighter(0xd8a878, 0x2266cc, 0x1a3a66); // เรา (น้ำเงิน)
+const fighter2 = buildFighter(0xd8a878, 0xcc2222, 0x661a1a); // คู่ต่อสู้ (แดง)
+
+fighter1.root.position.set(0, 0, 1.6);
+fighter1.root.rotation.y = Math.PI;
+fighter2.root.position.set(0, 0, -1.6);
+fighter2.root.rotation.y = 0;
+
+scene.add(fighter1.root, fighter2.root);
+
+/* ====================== 4) ANIMATION SYSTEM ====================== */
+function lerp(a,b,t){ return a+(b-a)*t; }
+function easeOutCubic(t){ return 1-Math.pow(1-t,3); }
+
+function setIdlePose(f){
+  f.armL.shoulder.rotation.set(-0.25, 0, 0.35);
+  f.armL.elbow.rotation.set(-1.7, 0, 0);
+  f.armR.shoulder.rotation.set(-0.25, 0, -0.35);
+  f.armR.elbow.rotation.set(-1.7, 0, 0);
+  f.legL.thighPivot.rotation.set(0,0,0.05);
+  f.legL.kneePivot.rotation.set(0,0,0);
+  f.legR.thighPivot.rotation.set(0,0,-0.05);
+  f.legR.kneePivot.rotation.set(0,0,0);
+  f.spine.rotation.set(0,0,0);
+  f.hip.rotation.set(0,0,0);
+  f.neck.rotation.set(0,0,0);
+}
+setIdlePose(fighter1);
+setIdlePose(fighter2);
+
+const MOVES = {
+  punch_left: {
+    duration: 0.42, stamina: 8,
+    apply(f, t){
+      const p = t<0.45 ? easeOutCubic(t/0.45) : 1-easeOutCubic((t-0.45)/0.55);
+      f.armL.shoulder.rotation.set(lerp(-0.25,0.55,p), lerp(0,-0.3,p), lerp(0.35,0.05,p));
+      f.armL.elbow.rotation.set(lerp(-1.7,-0.15,p), 0, 0);
+      f.spine.rotation.y = lerp(0, -0.28, p);
+      f.hip.rotation.y = lerp(0, -0.15, p);
+    }
+  },
+  punch_right: {
+    duration: 0.42, stamina: 8,
+    apply(f, t){
+      const p = t<0.45 ? easeOutCubic(t/0.45) : 1-easeOutCubic((t-0.45)/0.55);
+      f.armR.shoulder.rotation.set(lerp(-0.25,0.55,p), lerp(0,0.3,p), lerp(-0.35,-0.05,p));
+      f.armR.elbow.rotation.set(lerp(-1.7,-0.15,p), 0, 0);
+      f.spine.rotation.y = lerp(0, 0.28, p);
+      f.hip.rotation.y = lerp(0, 0.15, p);
+    }
+  },
+  elbow: {
+    duration: 0.5, stamina: 14,
+    apply(f, t){
+      const p = t<0.4 ? easeOutCubic(t/0.4) : 1-easeOutCubic((t-0.4)/0.6);
+      f.armR.shoulder.rotation.set(lerp(-0.25,1.4,p), lerp(0,0.9,p), lerp(-0.35,0.1,p));
+      f.armR.elbow.rotation.set(lerp(-1.7,-1.9,p), 0, 0);
+      f.spine.rotation.y = lerp(0, -0.4, p);
+      f.spine.rotation.x = lerp(0,-0.1,p);
+    }
+  },
+  knee: {
+    duration: 0.5, stamina: 16,
+    apply(f, t){
+      const p = t<0.4 ? easeOutCubic(t/0.4) : 1-easeOutCubic((t-0.4)/0.6);
+      f.legR.thighPivot.rotation.x = lerp(0, -1.3, p);
+      f.legR.kneePivot.rotation.x = lerp(0, 1.6, p);
+      f.armL.shoulder.rotation.z = lerp(0.35, 0.9, p);
+      f.armR.shoulder.rotation.z = lerp(-0.35, -0.9, p);
+      f.spine.rotation.x = lerp(0, 0.15, p);
+      f.hip.position.y = 0.92 - 0.05*Math.sin(p*Math.PI);
+    }
+  },
+  kick: {
+    duration: 0.6, stamina: 18,
+    apply(f, t){
+      const p = t<0.35 ? easeOutCubic(t/0.35) : 1-easeOutCubic((t-0.35)/0.65);
+      f.hip.rotation.y = lerp(0, 1.1, p);
+      f.legR.thighPivot.rotation.x = lerp(0, -1.1, p);
+      f.legR.thighPivot.rotation.z = lerp(-0.05, 0.3, p);
+      f.legR.kneePivot.rotation.x = lerp(0, 0.3, p*0.6);
+      f.armL.shoulder.rotation.z = lerp(0.35, 0.7, p);
+      f.armR.shoulder.rotation.z = lerp(-0.35, -0.5, p);
+    }
+  },
+  block: {
+    duration: 0.5, stamina: 4,
+    apply(f, t){
+      const p = t<0.25 ? easeOutCubic(t/0.25) : (t<0.7 ? 1 : 1-easeOutCubic((t-0.7)/0.3));
+      f.armL.shoulder.rotation.set(lerp(-0.25,0.9,p), lerp(0,0.4,p), lerp(0.35,0.5,p));
+      f.armL.elbow.rotation.x = lerp(-1.7,-2.3,p);
+      f.armR.shoulder.rotation.set(lerp(-0.25,0.9,p), lerp(0,-0.4,p), lerp(-0.35,-0.5,p));
+      f.armR.elbow.rotation.x = lerp(-1.7,-2.3,p);
+      f.neck.rotation.x = lerp(0,0.15,p);
+    }
+  },
+  dodge: {
+    duration: 0.45, stamina: 10,
+    apply(f, t){
+      const p = t<0.3 ? easeOutCubic(t/0.3) : 1-easeOutCubic((t-0.3)/0.7);
+      f.spine.rotation.z = lerp(0, 0.35, p);
+      f.hip.rotation.z = lerp(0, -0.15, p);
+      f.root.position.x = f._baseX + lerp(0, f._dodgeDir*0.35, p);
+      f.neck.rotation.z = lerp(0,-0.2,p);
+    }
+  },
+  guard_high: {
+    duration: 0.5, stamina: 3,
+    apply(f, t){
+      const p = t<0.25 ? easeOutCubic(t/0.25) : (t<0.75 ? 1 : 1-easeOutCubic((t-0.75)/0.25));
+      f.armL.shoulder.rotation.set(lerp(-0.25,1.3,p), lerp(0,0.2,p), lerp(0.35,0.3,p));
+      f.armL.elbow.rotation.x = lerp(-1.7,-2.6,p);
+      f.armR.shoulder.rotation.set(lerp(-0.25,1.3,p), lerp(0,-0.2,p), lerp(-0.35,-0.3,p));
+      f.armR.elbow.rotation.x = lerp(-1.7,-2.6,p);
+      f.neck.rotation.x = lerp(0,0.3,p);
+    }
+  },
+  hit_react: {
+    duration: 0.35, stamina: 0,
+    apply(f, t){
+      const p = t<0.3 ? easeOutCubic(t/0.3) : 1-easeOutCubic((t-0.3)/0.7);
+      f.spine.rotation.x = lerp(0, -0.3, p);
+      f.neck.rotation.x = lerp(0, -0.35, p);
+      f.hip.position.z = f._baseZ + lerp(0, f._hitDir*0.12, p);
+    }
+  },
+  // ---- ท่าเดิน 4 ทิศทาง: ก้าวเดียวจบ สับขาสมจริง แล้วเปลี่ยนตำแหน่งฐานจริงบนเวที ----
+  walk_forward: {
+    duration: 0.46, stamina: 3,
+    apply(f, t){
+      const swing = Math.sin(t * Math.PI); // 0 -> 1 -> 0 ตลอดช่วงก้าว
+      f.legR.thighPivot.rotation.x = lerp(0, -0.5, swing);
+      f.legR.kneePivot.rotation.x = lerp(0, 0.7, swing);
+      f.legL.thighPivot.rotation.x = lerp(0, 0.25, swing);
+      f.armL.shoulder.rotation.x = lerp(-0.25, 0.15, swing);
+      f.armR.shoulder.rotation.x = lerp(-0.25, -0.35, swing);
+      f.hip.position.y = 0.92 - 0.025*swing;
+      f.root.position.z = f._baseZ + lerp(0, f._walkStepLen, easeOutCubic(t)) * f.root._walkDirSign;
+    }
+  },
+  walk_backward: {
+    duration: 0.46, stamina: 3,
+    apply(f, t){
+      const swing = Math.sin(t * Math.PI);
+      f.legL.thighPivot.rotation.x = lerp(0, 0.5, swing);
+      f.legL.kneePivot.rotation.x = lerp(0, 0.7, swing);
+      f.legR.thighPivot.rotation.x = lerp(0, -0.25, swing);
+      f.armR.shoulder.rotation.x = lerp(-0.25, 0.1, swing);
+      f.armL.shoulder.rotation.x = lerp(-0.25, -0.3, swing);
+      f.hip.position.y = 0.92 - 0.02*swing;
+      f.root.position.z = f._baseZ - lerp(0, f._walkStepLen, easeOutCubic(t)) * f.root._walkDirSign;
+    }
+  },
+  walk_left: {
+    duration: 0.4, stamina: 3,
+    apply(f, t){
+      const swing = Math.sin(t * Math.PI);
+      f.legL.thighPivot.rotation.z = lerp(0.05, 0.55, swing);
+      f.legR.thighPivot.rotation.z = lerp(-0.05, -0.3, swing);
+      f.spine.rotation.z = lerp(0, 0.1, swing);
+      f.hip.position.y = 0.92 - 0.02*swing;
+      f.root.position.x = f._baseX + lerp(0, f._walkStepLen, easeOutCubic(t)) * f.root._walkSideSign;
+    }
+  },
+  walk_right: {
+    duration: 0.4, stamina: 3,
+    apply(f, t){
+      const swing = Math.sin(t * Math.PI);
+      f.legR.thighPivot.rotation.z = lerp(-0.05, -0.55, swing);
+      f.legL.thighPivot.rotation.z = lerp(0.05, 0.3, swing);
+      f.spine.rotation.z = lerp(0, -0.1, swing);
+      f.hip.position.y = 0.92 - 0.02*swing;
+      f.root.position.x = f._baseX - lerp(0, f._walkStepLen, easeOutCubic(t)) * f.root._walkSideSign;
+    }
+  }
+};
+
+const MOVE_INFO = {
+  punch_left:  { damage:6,  type:'punch' },
+  punch_right: { damage:7,  type:'punch' },
+  elbow:       { damage:13, type:'strike' },
+  knee:        { damage:14, type:'strike' },
+  kick:        { damage:15, type:'strike' },
+  block:       { damage:0,  type:'defense' },
+  dodge:       { damage:0,  type:'defense' },
+  guard_high:  { damage:0,  type:'defense' },
+  walk_forward:  { damage:0, type:'walk' },
+  walk_backward: { damage:0, type:'walk' },
+  walk_left:     { damage:0, type:'walk' },
+  walk_right:    { damage:0, type:'walk' },
+};
+const WALK_MOVES = new Set(['walk_forward','walk_backward','walk_left','walk_right']);
+const RING_BOUND = 3.0; // ขอบเขตเวที กันเดินทะลุเชือก (เวทีจริงขนาด 7.2 -> ครึ่งหนึ่งคือ 3.6 เผื่อระยะตัวกับเชือก)
+
+/* ====================== 5) FIGHTER STATE MACHINE ====================== */
+function makeFighterState(fighter, baseZ, dodgeDir){
+  fighter._baseX = fighter.root.position.x;
+  fighter._baseZ = baseZ;
+  fighter._dodgeDir = dodgeDir;
+  fighter._hitDir = dodgeDir;
+  fighter._walkStepLen = 0.42; // ระยะที่เคลื่อนต่อก้าว (เมตรโดยประมาณในหน่วยฉาก)
+  // ทิศ "หน้า" ของนักมวยแต่ละคนตรงข้ามกัน (หมุน 180 องศา) ต้องคำนวณ sign ตาม rotation.y จริง
+  // เดินหน้า = เดินเข้าหากึ่งกลางเวที (ลด |z|), เดินซ้าย = เดินไปทาง -x จากมุมมองของตัวเอง
+  const facingSign = Math.cos(fighter.root.rotation.y) >= 0 ? 1 : -1; // 1 = หันไปทาง +z, -1 = หันไปทาง -z
+  fighter.root._walkDirSign = facingSign;   // ใช้คูณกับ "เดินหน้า/ถอยหลัง" ตามแกน z
+  fighter.root._walkSideSign = facingSign;  // ใช้คูณกับ "เดินซ้าย/ขวา" ตามแกน x (ซ้ายขวาของนักมวยเอง สลับกันถ้าหันกลับทาง)
+  return {
+    fighter, hp: 100, stamina: 100,
+    currentMove: null, defenseActive: null, koed: false,
+  };
+}
+const stateP1 = makeFighterState(fighter1, 1.6, -1);
+const stateP2 = makeFighterState(fighter2, -1.6, 1);
+const myState = stateP1;
+const oppState = stateP2;
+
+function clamp(v, min, max){ return Math.max(min, Math.min(max, v)); }
+
+function playMove(state, moveKey){
+  if(state.koed) return false;
+  if(state.currentMove) return false;
+  const def = MOVES[moveKey];
+  if(!def) return false;
+  if(state.stamina < def.stamina) return false;
+  if(WALK_MOVES.has(moveKey) && !canWalk(state, moveKey)) return false; // กันเดินทะลุขอบเวที
+  state.stamina = Math.max(0, state.stamina - def.stamina);
+  state.currentMove = { key: moveKey, t: 0, duration: def.duration };
+  if(MOVE_INFO[moveKey] && MOVE_INFO[moveKey].type === 'defense'){
+    state.defenseActive = moveKey;
+  }
+  return true;
+}
+
+function updateFighterAnim(state, dt){
+  if(state.currentMove){
+    state.currentMove.t += dt;
+    const def = MOVES[state.currentMove.key];
+    const t = Math.min(1, state.currentMove.t / state.currentMove.duration);
+    def.apply(state.fighter, t);
+    if(t >= 1){
+      const isWalk = WALK_MOVES.has(state.currentMove.key);
+      state.currentMove = null;
+      state.defenseActive = null;
+      setIdlePose(state.fighter);
+      state.fighter.hip.position.y = 0.92;
+      if(isWalk){
+        // ท่าเดิน: ค้างตำแหน่งใหม่ไว้จริง ไม่ snap กลับที่เดิม — อัปเดต base ให้ตรงกับตำแหน่งปลายก้าว
+        state.fighter._baseX = state.fighter.root.position.x;
+        state.fighter._baseZ = state.fighter.root.position.z;
+      } else {
+        // ท่าอื่น (ชก/ป้องกัน/หลบ): กลับตำแหน่งฐานเดิมเสมอ ไม่ขยับถาวร
+        state.fighter.root.position.x = state.fighter._baseX;
+        state.fighter.root.position.z = state.fighter._baseZ;
+      }
+    }
+  } else {
+    state.stamina = Math.min(100, state.stamina + dt*9);
+  }
+}
+
+// เช็คก่อนเริ่มท่าเดินว่าจะพาตัวออกนอกเวทีไหม ถ้าจะออกนอกขอบเขต ไม่ให้เริ่มท่านั้น (กันเดินทะลุเชือก)
+function canWalk(state, moveKey){
+  const f = state.fighter;
+  const step = f._walkStepLen;
+  let nextX = f._baseX, nextZ = f._baseZ;
+  if(moveKey === 'walk_forward')  nextZ = f._baseZ + step * f.root._walkDirSign;
+  if(moveKey === 'walk_backward') nextZ = f._baseZ - step * f.root._walkDirSign;
+  if(moveKey === 'walk_left')     nextX = f._baseX + step * f.root._walkSideSign;
+  if(moveKey === 'walk_right')    nextX = f._baseX - step * f.root._walkSideSign;
+  return Math.abs(nextX) <= RING_BOUND && Math.abs(nextZ) <= RING_BOUND;
+}
+
+/* ====================== 6) NETWORKING (Socket.io) ====================== */
+let socket = null;
+let roomCode = null;
+let gameEnded = false;
+
+function connectSocket(){
+  socket = io(SERVER_URL, { transports:['websocket','polling'] });
+
+  socket.on('room_created', ({ code }) => {
+    roomCode = code;
+    document.getElementById('room-code-text').textContent = code;
+    showOverlay('waiting-overlay');
+  });
+
+  socket.on('room_joined', ({ code }) => {
+    roomCode = code;
+    proceedToMicPermission();
+  });
+
+  socket.on('join_error', ({ message }) => {
+    document.getElementById('join-status').textContent = message;
+  });
+
+  socket.on('opponent_connected', () => {
+    if(!document.getElementById('waiting-overlay').classList.contains('hidden')){
+      proceedToMicPermission();
+    }
+  });
+
+  socket.on('opponent_action', (payload) => {
+    handleOpponentAction(payload);
+  });
+
+  socket.on('opponent_hp_update', ({ hp }) => {
+    oppState.hp = hp;
+    updateHpBars();
+  });
+
+  socket.on('opponent_disconnected', () => {
+    if(!gameEnded){
+      showRoundResult(true, 'คู่ต่อสู้หลุดการเชื่อมต่อ คุณชนะโดยปริยาย');
+    }
+  });
+
+  socket.on('opponent_restart_request', () => {
+    document.getElementById('result-status').textContent = 'คู่ต่อสู้ขอแข่งใหม่ — กดขอแข่งใหม่เพื่อยืนยัน';
+  });
+}
+
+function handleOpponentAction(payload){
+  const info = MOVE_INFO[payload.move];
+  if(!info) return;
+  const started = playMove(oppState, payload.move);
+  if(!started) return;
+
+  if(info.type === 'walk') return; // ท่าเดินของคู่ต่อสู้ไม่เกี่ยวกับดาเมจ แค่ขยับตำแหน่งฝั่งเขา
+
+  if(info.type !== 'defense'){
+    setTimeout(() => {
+      let dmg = info.damage;
+      if(myState.defenseActive === 'block'){
+        dmg = Math.round(dmg * 0.25);
+      } else if(myState.defenseActive === 'guard_high'){
+        dmg = Math.round(dmg * 0.45);
+      } else if(myState.defenseActive === 'dodge'){
+        dmg = 0;
+      }
+      if(dmg > 0){
+        myState.hp = Math.max(0, myState.hp - dmg);
+        playMove(myState, 'hit_react');
+        updateHpBars();
+        sendHpUpdate();
+        checkKO();
+      }
+    }, 180);
+  }
+}
+
+function sendAction(moveKey){
+  if(vsBot) return; // โหมดบอทไม่ต้องส่งผ่าน network
+  if(socket && roomCode) socket.emit('player_action', { move: moveKey });
+}
+function sendHpUpdate(){
+  if(vsBot) return;
+  if(socket && roomCode) socket.emit('hp_update', { hp: myState.hp });
+}
+
+/* ====================== 6b) AI BOT OPPONENT ====================== */
+// บอทเล่นแทนคู่ต่อสู้ทั้งหมด (oppState) แบบ local ไม่ผ่าน network
+// แนวคิด: บอทมี "นาฬิกาตัดสินใจ" ของตัวเอง รีแอคชันต่อจังหวะที่เราโจมตี และจดจำ pattern ท่าที่เราชอบใช้
+let vsBot = false;
+let botDifficulty = 'medium';
+let botTimer = 0;
+let botNextDecisionAt = 0;
+let myRecentMoves = []; // เก็บท่าล่าสุดของเรา ให้บอทระดับยาก "อ่านเกม"
+
+const BOT_PROFILES = {
+  easy: {
+    reactionMin: 0.8, reactionMax: 1.6,     // ดีเลย์ก่อนบอทตอบโต้หลังเราโจมตี (วินาที)
+    defendChance: 0.30,                      // โอกาสที่บอทจะป้องกันสำเร็จตรงจังหวะ
+    attackIntervalMin: 1.4, attackIntervalMax: 2.6, // ความถี่บอทโจมตีเอง
+    aggroOnLowStamina: 0,                     // ไม่ฉวยโอกาสตอนเราหมดแรง
+    heavyMoveChance: 0.25,                    // โอกาสเลือกท่าหนัก (เข่า/ศอก/เตะ) ตอนโจมตี
+    patternRead: false,
+  },
+  medium: {
+    reactionMin: 0.4, reactionMax: 0.8,
+    defendChance: 0.55,
+    attackIntervalMin: 0.9, attackIntervalMax: 1.8,
+    aggroOnLowStamina: 0.3,
+    heavyMoveChance: 0.45,
+    patternRead: false,
+  },
+  hard: {
+    reactionMin: 0.15, reactionMax: 0.4,
+    defendChance: 0.78,
+    attackIntervalMin: 0.5, attackIntervalMax: 1.2,
+    aggroOnLowStamina: 0.6,
+    heavyMoveChance: 0.6,
+    patternRead: true, // วิเคราะห์ท่าที่เราใช้บ่อยแล้วเลือกป้องกันแบบเจาะจง
+  }
+};
+
+const ATTACK_MOVES = ['punch_left','punch_right','elbow','knee','kick'];
+const HEAVY_MOVES = ['elbow','knee','kick'];
+const LIGHT_MOVES = ['punch_left','punch_right'];
+const DEFENSE_MOVES = ['block','dodge','guard_high'];
+
+function recordMyMove(moveKey){
+  myRecentMoves.push(moveKey);
+  if(myRecentMoves.length > 6) myRecentMoves.shift();
+}
+
+// เรียกตอนเรา (ผู้เล่น) เพิ่งโจมตีสำเร็จ ในโหมดบอท — ให้บอทตัดสินใจว่าจะป้องกันไหม
+function botReactToPlayerAttack(){
+  if(!vsBot || oppState.koed) return;
+  const profile = BOT_PROFILES[botDifficulty];
+  const delay = lerp(profile.reactionMin, profile.reactionMax, Math.random());
+
+  setTimeout(() => {
+    if(oppState.koed || oppState.currentMove) return; // บอทกำลังทำท่าอื่นอยู่ ขัดไม่ได้เหมือนกัน
+
+    let willDefend = Math.random() < profile.defendChance;
+
+    // ระดับยาก: วิเคราะห์ pattern ท่าที่เราใช้บ่อยล่าสุด เพิ่มโอกาสป้องกันแบบเจาะจงถูกท่า
+    let defenseChoice = DEFENSE_MOVES[Math.floor(Math.random()*DEFENSE_MOVES.length)];
+    if(profile.patternRead && myRecentMoves.length >= 3){
+      const counts = {};
+      myRecentMoves.forEach(m => counts[m] = (counts[m]||0)+1);
+      const favoredMove = Object.keys(counts).sort((a,b)=>counts[b]-counts[a])[0];
+      // เลือกวิธีป้องกันที่เหมาะกับท่าที่เราชอบใช้: หมัดเร็ว -> dodge, ท่าหนัก -> block
+      if(LIGHT_MOVES.includes(favoredMove)) defenseChoice = 'dodge';
+      else defenseChoice = 'block';
+    }
+
+    if(willDefend){
+      playMove(oppState, defenseChoice);
+    }
+    // ถ้าไม่ป้องกัน ดาเมจจะคำนวณตามปกติใน triggerMyMove (ฝั่งบอทไม่มี action ป้องกัน = โดนเต็ม)
+  }, delay * 1000);
+}
+
+// บอทโจมตีเองตามจังหวะที่สุ่มไว้ ผสมท่าหนัก/เบา และฉวยโอกาสตอนเราเพลี้ยงพล้ำ
+function botAutoAttackTick(dt){
+  if(!vsBot || oppState.koed || myState.koed) return;
+  botTimer += dt;
+  if(botTimer < botNextDecisionAt) return;
+
+  const profile = BOT_PROFILES[botDifficulty];
+  botTimer = 0;
+  let interval = lerp(profile.attackIntervalMin, profile.attackIntervalMax, Math.random());
+
+  // ถ้าเรา stamina ต่ำ บอทระดับสูงจะฉวยโอกาสโจมตีถี่ขึ้น (ความได้เปรียบเชิงกลยุทธ์)
+  if(myState.stamina < 30 && Math.random() < profile.aggroOnLowStamina){
+    interval *= 0.4;
+  }
+  botNextDecisionAt = interval;
+
+  if(oppState.currentMove || oppState.stamina < 15) return; // บอทกำลังทำท่าอยู่ หรือแรงไม่พอ
+
+  // วัดระยะห่างจริงบนเวที (แกน z เป็นหลัก เพราะนักมวยยืนหันหน้าเข้าหากันตามแนวนี้)
+  const distance = Math.abs(oppState.fighter._baseZ - myState.fighter._baseZ);
+
+  if(distance > 1.9){
+    // ไกลเกินไป โจมตีไม่ถึง -> เดินเข้าหาก่อน แทนการโจมตี
+    if(playMove(oppState, 'walk_forward')) return;
+  } else if(distance < 0.9 && profile.patternRead && Math.random() < 0.3){
+    // บอทระดับยากบางครั้งจะถอยสร้างระยะ แทนการปะทะตรงๆ ตลอด (ดูมีกลยุทธ์มากขึ้น)
+    if(playMove(oppState, 'walk_backward')) return;
+  }
+
+  const useHeavy = Math.random() < profile.heavyMoveChance;
+  const pool = useHeavy ? HEAVY_MOVES : LIGHT_MOVES;
+  const moveKey = pool[Math.floor(Math.random()*pool.length)];
+
+  const started = playMove(oppState, moveKey);
+  if(started){
+    // ให้ผู้เล่นมีเวลาพูดคำสั่งป้องกันทัน (พูด+ระบบรู้จำเสียงใช้เวลาราว 0.5-0.9s)
+    applyAttackOutcome(oppState, myState, moveKey, oppState._dodgeDir, 750);
+  }
+}
+
+// คำนวณผลโจมตีแบบรวม ใช้ทั้งฝั่งบอทโจมตีเรา และฝั่งเราโจมตีบอท
+// hitDelayMs: เวลารอก่อนคำนวณดาเมจ ต้องนานพอให้ "ฝั่งรับ" มีโอกาสกดป้องกันทันจังหวะจริง
+function applyAttackOutcome(attackerState, defenderState, moveKey, hitDir, hitDelayMs){
+  const info = MOVE_INFO[moveKey];
+  if(!info || info.type === 'defense') return;
+  setTimeout(() => {
+    if(defenderState.koed) return;
+    let dmg = info.damage;
+    if(defenderState.defenseActive === 'block') dmg = Math.round(dmg * 0.25);
+    else if(defenderState.defenseActive === 'guard_high') dmg = Math.round(dmg * 0.45);
+    else if(defenderState.defenseActive === 'dodge') dmg = 0;
+
+    if(dmg > 0){
+      defenderState.hp = Math.max(0, defenderState.hp - dmg);
+      playMove(defenderState, 'hit_react');
+      updateHpBars();
+      checkKO();
+    }
+  }, hitDelayMs != null ? hitDelayMs : 180);
+}
+
+/* ====================== 7) SPEECH RECOGNITION (ภาษาไทย) ====================== */
+const VOICE_COMMANDS = [
+  { move:'punch_left',  patterns:['ซ้าย','หมัดซ้าย'] },
+  { move:'punch_right', patterns:['ขวา','หมัดขวา'] },
+  { move:'elbow',       patterns:['ศอก','ตีศอก'] },
+  { move:'knee',        patterns:['เข่า','ตีเข่า'] },
+  { move:'kick',        patterns:['เตะ'] },
+  { move:'block',       patterns:['บล็อก','บล็อค','ป้องกัน'] },
+  { move:'dodge',       patterns:['หลบ','หลบหลีก'] },
+  { move:'guard_high',  patterns:['การ์ด','การ์ดสูง','ยกการ์ด'] },
+  { move:'walk_forward',  patterns:['เดินหน้า'] },
+  { move:'walk_backward', patterns:['ถอยหลัง','ถอย'] },
+  { move:'walk_left',     patterns:['ไปซ้าย','เดินซ้าย'] },
+  { move:'walk_right',    patterns:['ไปขวา','เดินขวา'] },
+];
+
+function matchCommand(transcript){
+  const text = transcript.replace(/\s+/g,'');
+  // เรียง pattern จากยาวไปสั้นก่อนเช็ค กัน pattern สั้นๆ (เช่น 'ซ้าย') แย่งจับคำที่มันเป็นส่วนหนึ่งของคำยาวกว่า (เช่น 'ไปซ้าย')
+  const allPatterns = [];
+  for(const cmd of VOICE_COMMANDS){
+    for(const p of cmd.patterns) allPatterns.push({ move: cmd.move, pattern: p });
+  }
+  allPatterns.sort((a,b) => b.pattern.length - a.pattern.length);
+  for(const { move, pattern } of allPatterns){
+    if(text.includes(pattern)) return move;
+  }
+  return null;
+}
+
+let recognition = null;
+let micActive = false;
+
+function startSpeechRecognition(){
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if(!SR){
+    document.getElementById('mic-perm-status').textContent =
+      'เบราว์เซอร์นี้ไม่รองรับการสั่งเสียง — กรุณาใช้ Chrome หรือ Edge';
+    return false;
+  }
+  recognition = new SR();
+  recognition.lang = 'th-TH';
+  recognition.continuous = true;
+  recognition.interimResults = true;
+  recognition.maxAlternatives = 1;
+
+  recognition.onresult = (event) => {
+    const result = event.results[event.results.length - 1];
+    const transcript = result[0].transcript.trim();
+    document.getElementById('heard-text').textContent = transcript ? `"${transcript}"` : '';
+    if(result.isFinal){
+      const move = matchCommand(transcript);
+      if(move) triggerMyMove(move);
+    }
+  };
+
+  recognition.onerror = (e) => {
+    console.warn('Speech recognition error:', e.error);
+    if(e.error === 'not-allowed' || e.error === 'service-not-allowed'){
+      setMicUI(false, 'ไมค์ถูกปฏิเสธ');
+    }
+  };
+
+  recognition.onend = () => {
+    if(micActive){
+      try{ recognition.start(); } catch(e){ /* start ซ้ำเร็วเกินไป ไม่เป็นไร */ }
+    }
+  };
+
+  try{
+    recognition.start();
+    micActive = true;
+    setMicUI(true, 'ไมค์ฟังอยู่');
+    return true;
+  } catch(e){
+    document.getElementById('mic-perm-status').textContent = 'ไม่สามารถเริ่มไมค์ได้: ' + e.message;
+    return false;
+  }
+}
+
+function setMicUI(live, text){
+  const dot = document.getElementById('mic-dot');
+  dot.className = live ? 'live' : 'off';
+  document.getElementById('mic-text').textContent = text;
+}
+
+function triggerMyMove(moveKey){
+  const started = playMove(myState, moveKey);
+  if(!started) return;
+  showCmdToast(labelForMove(moveKey));
+
+  if(WALK_MOVES.has(moveKey)){
+    if(!vsBot) sendAction(moveKey); // โหมด online: ส่งท่าเดินให้คู่ต่อสู้เห็นด้วย (ไม่เกี่ยวกับดาเมจ)
+    return;
+  }
+
+  if(vsBot){
+    recordMyMove(moveKey);
+    const info = MOVE_INFO[moveKey];
+    if(info.type !== 'defense'){
+      const profile = BOT_PROFILES[botDifficulty];
+      botReactToPlayerAttack();           // บอทมีโอกาสป้องกันตามจังหวะ/ระดับยาก
+      // รอจน reaction window ของบอทจบก่อนคำนวณดาเมจ (+ buffer เล็กน้อยให้ playMove ตั้ง defenseActive ทัน)
+      const hitDelayMs = profile.reactionMax * 1000 + 60;
+      applyAttackOutcome(myState, oppState, moveKey, myState._dodgeDir, hitDelayMs);
+    }
+  } else {
+    sendAction(moveKey);
+  }
+}
+
+function labelForMove(key){
+  const map = {
+    punch_left:'หมัดซ้าย!', punch_right:'หมัดขวา!', elbow:'ศอก!', knee:'เข่า!',
+    kick:'เตะ!', block:'บล็อก', dodge:'หลบ!', guard_high:'การ์ดสูง',
+    walk_forward:'เดินหน้า', walk_backward:'ถอยหลัง', walk_left:'ไปซ้าย', walk_right:'ไปขวา'
+  };
+  return map[key] || key;
+}
+
+let toastTimer = null;
+function showCmdToast(text){
+  const el = document.getElementById('cmd-toast');
+  el.textContent = text;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=> el.classList.remove('show'), 700);
+}
+
+/* ====================== 8) HUD ====================== */
+function updateHpBars(){
+  const p1Bar = document.getElementById('p1-hp');
+  const p2Bar = document.getElementById('p2-hp');
+  p1Bar.style.width = myState.hp + '%';
+  p2Bar.style.width = oppState.hp + '%';
+  p1Bar.className = 'hp-bar-inner' + (myState.hp<25?' danger':myState.hp<55?' warn':'');
+  p2Bar.className = 'hp-bar-inner' + (oppState.hp<25?' danger':oppState.hp<55?' warn':'');
+  document.getElementById('p1-stamina').style.width = myState.stamina + '%';
+  document.getElementById('p2-stamina').style.width = oppState.stamina + '%';
+}
+
+function checkKO(){
+  if(myState.hp <= 0 && !myState.koed){
+    myState.koed = true;
+    showRoundResult(false, 'คุณโดน KO!');
+  }
+  if(oppState.hp <= 0 && !oppState.koed){
+    oppState.koed = true;
+    showRoundResult(true, 'คู่ต่อสู้โดน KO!');
+  }
+}
+
+function showRoundResult(won, subtext){
+  gameEnded = true;
+  document.querySelectorAll('.overlay').forEach(el => el.classList.add('hidden'));
+  document.getElementById('result-overlay').classList.remove('hidden');
+  const banner = document.getElementById('winner-banner');
+  banner.textContent = won ? 'คุณชนะ!' : 'คุณแพ้';
+  banner.className = won ? 'win' : 'lose';
+  document.getElementById('result-sub').textContent = subtext;
+}
+
+/* ====================== 9) OVERLAY / MENU FLOW ====================== */
+function showOverlay(id){
+  document.querySelectorAll('.overlay').forEach(el => el.classList.add('hidden'));
+  const el = document.getElementById(id);
+  if(el) el.classList.remove('hidden');
+}
+
+document.getElementById('btn-create-room').onclick = () => {
+  if(!socket) connectSocket();
+  socket.emit('create_room');
+};
+document.getElementById('btn-show-join').onclick = () => showOverlay('join-overlay');
+document.getElementById('btn-back-from-join').onclick = () => showOverlay('menu-overlay');
+document.getElementById('btn-confirm-join').onclick = () => {
+  const code = document.getElementById('room-input').value.trim();
+  if(code.length !== 4){
+    document.getElementById('join-status').textContent = 'กรอกรหัส 4 หลัก';
+    return;
+  }
+  if(!socket) connectSocket();
+  document.getElementById('join-status').textContent = 'กำลังเชื่อมต่อ...';
+  socket.emit('join_room', { code });
+};
+document.getElementById('btn-cancel-wait').onclick = () => location.reload();
+
+document.getElementById('btn-vs-bot').onclick = () => showOverlay('bot-difficulty-overlay');
+document.getElementById('btn-back-from-bot').onclick = () => showOverlay('menu-overlay');
+
+function startBotMode(difficulty){
+  vsBot = true;
+  botDifficulty = difficulty;
+  botTimer = 0;
+  botNextDecisionAt = lerp(BOT_PROFILES[difficulty].attackIntervalMin, BOT_PROFILES[difficulty].attackIntervalMax, Math.random());
+  myRecentMoves = [];
+  document.getElementById('p2-name').textContent =
+    difficulty === 'easy' ? 'บอท (ง่าย)' : difficulty === 'hard' ? 'บอท (ยาก)' : 'บอท (กลาง)';
+  proceedToMicPermission();
+}
+document.getElementById('btn-bot-easy').onclick = () => startBotMode('easy');
+document.getElementById('btn-bot-medium').onclick = () => startBotMode('medium');
+document.getElementById('btn-bot-hard').onclick = () => startBotMode('hard');
+
+function proceedToMicPermission(){ showOverlay('mic-overlay'); }
+
+document.getElementById('btn-enable-mic').onclick = async () => {
+  const status = document.getElementById('mic-perm-status');
+  try{
+    await navigator.mediaDevices.getUserMedia({ audio:true });
+  } catch(e){
+    status.textContent = 'ไม่ได้รับอนุญาตไมโครโฟน กรุณาเปิดสิทธิ์ในเบราว์เซอร์';
+    return;
+  }
+  const ok = startSpeechRecognition();
+  if(ok){
+    document.querySelectorAll('.overlay').forEach(el => el.classList.add('hidden'));
+    gameEnded = false;
+  }
+};
+
+document.getElementById('btn-rematch').onclick = () => {
+  if(socket) socket.emit('restart_request');
+  resetMatch();
+  if(vsBot){
+    botTimer = 0;
+    botNextDecisionAt = lerp(BOT_PROFILES[botDifficulty].attackIntervalMin, BOT_PROFILES[botDifficulty].attackIntervalMax, Math.random());
+    myRecentMoves = [];
+  }
+  document.querySelectorAll('.overlay').forEach(el => el.classList.add('hidden'));
+};
+document.getElementById('btn-exit').onclick = () => location.reload();
+
+function resetMatch(){
+  myState.hp = 100; myState.stamina = 100; myState.koed = false; myState.currentMove=null;
+  oppState.hp = 100; oppState.stamina = 100; oppState.koed = false; oppState.currentMove=null;
+  setIdlePose(fighter1); setIdlePose(fighter2);
+  gameEnded = false;
+  updateHpBars();
+}
+
+document.getElementById('room-input').addEventListener('input', (e) => {
+  e.target.value = e.target.value.replace(/\D/g,'').slice(0,4);
+});
+
+/* ====================== 10) MAIN LOOP ====================== */
+let lastTime = performance.now();
+function animate(){
+  requestAnimationFrame(animate);
+  const now = performance.now();
+  const dt = Math.min(0.05, (now - lastTime)/1000);
+  lastTime = now;
+  updateFighterAnim(myState, dt);
+  updateFighterAnim(oppState, dt);
+  if(vsBot && !gameEnded) botAutoAttackTick(dt);
+  updateHpBars();
+  renderer.render(scene, camera);
+}
+updateHpBars();
+animate();
+</script>
+</body>
+</html>
